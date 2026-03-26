@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>편지 에디터 - 뉴스프로포즈</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;800;900&family=Nanum+Myeongjo:wght@400;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,600;1,300&family=Nanum+Pen+Script&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Noto Sans KR',sans-serif}::-webkit-scrollbar{width:0;display:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes heartbeat{0%,100%{transform:scale(1)}14%{transform:scale(1.15)}28%{transform:scale(1)}42%{transform:scale(1.1)}70%{transform:scale(1)}}
+@keyframes wave{0%,100%{height:4px}50%{height:14px}}
+@keyframes starFront{0%{opacity:0;transform:translateY(0) scale(0.5)}15%{opacity:0.9}65%{opacity:0.9;transform:translateY(-320px) scale(1)}85%{opacity:0;transform:translateY(-380px) scale(0.5)}100%{opacity:0;transform:translateY(-400px) scale(0)}}
+@keyframes starBack{0%{opacity:0;transform:translateY(0) scale(0.3)}20%{opacity:0.45}70%{opacity:0.25;transform:translateY(-80px) scale(0.6)}100%{opacity:0;transform:translateY(-140px) scale(0.15)}}
+@keyframes twinkle{0%,100%{opacity:0.15;transform:scale(0.7)}50%{opacity:0.6;transform:scale(1.1)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes popIn{0%{opacity:0;transform:scale(0.8) rotate(-3deg)}100%{opacity:1;transform:scale(1) rotate(0deg)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes designBounce{0%,100%{transform:scale(1) rotate(0deg)}20%{transform:scale(1.2) rotate(-8deg)}40%{transform:scale(0.95) rotate(5deg)}60%{transform:scale(1.1) rotate(-3deg)}80%{transform:scale(1) rotate(2deg)}}
+@keyframes designGlow{0%,100%{box-shadow:0 0 6px rgba(255,200,100,0.4)}50%{box-shadow:0 0 18px rgba(255,200,100,0.9),0 0 30px rgba(255,180,60,0.5)}}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useEffect}=React;
+
+function parseYt(url){
+  if(!url)return"";
+  const p=[/youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,/youtu\.be\/([a-zA-Z0-9_-]{11})/,/youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,/youtube\.com\/live\/([a-zA-Z0-9_-]{11})/];
+  for(let r of p){const m=url.match(r);if(m)return m[1];}
+  return"";
+}
+
+function VideoBlock({ytId,localVideo}){
+  if(!ytId&&!localVideo)return null;
+  return <div style={{borderRadius:8,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
+    {ytId?<div style={{position:"relative",width:"100%",paddingBottom:"56.25%",background:"#000"}}><iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&playsinline=1`} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}} allow="autoplay;encrypted-media" allowFullScreen/></div>
+    :<video src={localVideo} controls playsInline style={{width:"100%",display:"block",background:"#000"}}/>}
+  </div>;
+}
+
+function InlineVideos({videos,accent}){
+  if(!videos||!videos.length)return null;
+  return <div>{videos.map((v,i)=><div key={i} style={{marginBottom:16}}>
+    <video src={v.src} controls playsInline style={{width:"100%",display:"block",borderRadius:8,boxShadow:"0 4px 20px rgba(0,0,0,0.25)"}}/>
+    {v.cap&&<div style={{textAlign:"center",fontSize:12,color:accent||"#888",marginTop:6,letterSpacing:1}}>{v.cap}</div>}
+  </div>)}</div>;
+}
+
+// 전체화면 사진 뷰어
+function PhotoViewer({src,cap,onClose}){
+  if(!src)return null;
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16,animation:"fadeIn 0.2s ease"}}>
+    <button onClick={onClose} style={{position:"absolute",top:16,right:16,width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+    <img src={src} alt="" style={{maxWidth:"100%",maxHeight:"85vh",objectFit:"contain",borderRadius:4,boxShadow:"0 8px 40px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}/>
+    {cap&&<div style={{color:"rgba(255,255,255,0.7)",fontSize:13,marginTop:12,textAlign:"center",letterSpacing:1}}>{cap}</div>}
+    <div style={{color:"rgba(255,255,255,0.3)",fontSize:11,marginTop:8}}>탭하면 닫기</div>
+  </div>;
+}
+
+function StackGallery({photos,s}){
+  const [cur,setCur]=useState(0);
+  const [view,setView]=useState(null);
+  const touchX=useRef(null);
+  const timer=useRef(null);
+  if(!photos||!photos.length)return null;
+
+  // 자동 슬라이드
+  useEffect(()=>{
+    if(photos.length<=1)return;
+    timer.current=setInterval(()=>setCur(c=>(c+1)%photos.length),3000);
+    return()=>clearInterval(timer.current);
+  },[photos.length]);
+
+  function resetTimer(){
+    clearInterval(timer.current);
+    if(photos.length>1)timer.current=setInterval(()=>setCur(c=>(c+1)%photos.length),3000);
+  }
+  function onTouchStart(e){touchX.current=e.touches[0].clientX;}
+  function onTouchEnd(e){
+    if(touchX.current===null)return;
+    const diff=touchX.current-e.changedTouches[0].clientX;
+    if(Math.abs(diff)>40){
+      if(diff>0)setCur(c=>(c+1)%photos.length);
+      if(diff<0)setCur(c=>(c-1+photos.length)%photos.length);
+      resetTimer();
+    }
+    touchX.current=null;
+  }
+  return <div style={{position:"relative",width:"100%",overflow:"hidden"}}>
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <div style={{display:"flex",transition:"transform 0.5s ease",transform:`translateX(-${cur*100}%)`}}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {photos.map((p,i)=><div key={i} style={{minWidth:"100%",padding:"0 28px"}}>
+        <div style={{background:"#fff",padding:8,boxShadow:"0 8px 30px rgba(0,0,0,0.3)",borderRadius:2,cursor:"zoom-in"}} onClick={()=>setView(p)}>
+          <img src={p.src} alt="" style={{width:"100%",height:280,objectFit:"cover",display:"block"}}/>
+          {p.cap&&<div style={{textAlign:"center",fontSize:11,color:"#888",padding:"8px 4px",fontFamily:s.fontSub,letterSpacing:2}}>{p.cap}</div>}
+        </div>
+      </div>)}
+    </div>
+    {photos.length>1&&<>
+      <div onClick={()=>{setCur(c=>(c-1+photos.length)%photos.length);resetTimer();}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",width:28,height:28,borderRadius:"50%",background:"rgba(0,0,0,0.35)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,zIndex:5}}>‹</div>
+      <div onClick={()=>{setCur(c=>(c+1)%photos.length);resetTimer();}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",width:28,height:28,borderRadius:"50%",background:"rgba(0,0,0,0.35)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,zIndex:5}}>›</div>
+      <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:12}}>
+        {photos.map((_,i)=><div key={i} onClick={()=>{setCur(i);resetTimer();}} style={{width:i===cur?20:6,height:6,borderRadius:3,background:s.accent,opacity:i===cur?1:0.3,cursor:"pointer",transition:"all 0.3s"}}/>)}
+      </div>
+    </>}
+  </div>;
+}
+
+function SliderGallery({photos,s}){
+  const [view,setView]=useState(null);
+  if(!photos||!photos.length)return null;
+  return <div>
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <div style={{overflowX:"auto",display:"flex",gap:12,padding:"0 28px",scrollSnapType:"x mandatory"}}>
+      {photos.map((p,i)=><div key={i} style={{flexShrink:0,width:200,scrollSnapAlign:"start",cursor:"zoom-in"}} onClick={()=>setView(p)}>
+        <img src={p.src} alt="" style={{width:200,height:260,objectFit:"cover",borderRadius:4,display:"block"}}/>
+        {p.cap&&<div style={{fontSize:11,color:s.subText,marginTop:6,textAlign:"center"}}>{p.cap}</div>}
+      </div>)}
+    </div>
+  </div>;
+}
+
+function GridGallery({photos}){
+  const [view,setView]=useState(null);
+  if(!photos||!photos.length)return null;
+  return <div>
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3,padding:"0 3px"}}>
+      {photos.map((p,i)=><div key={i} style={{position:"relative",paddingBottom:"100%",overflow:"hidden",cursor:"zoom-in"}} onClick={()=>setView(p)}>
+        <img src={p.src} alt="" style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"cover"}}/>
+      </div>)}
+    </div>
+  </div>;
+}
+
+function TypeWriter({text,speed,delay,onDone}){
+  const [s,setS]=useState(""); const [go,setGo]=useState(false);
+  useEffect(()=>{const t=setTimeout(()=>setGo(true),delay||0);return()=>clearTimeout(t);},[delay]);
+  useEffect(()=>{
+    if(!go||!text)return;
+    if(s.length>=text.length){onDone&&onDone();return;}
+    const t=setTimeout(()=>setS(text.slice(0,s.length+1)),speed||40);
+    return()=>clearTimeout(t);
+  },[go,s,text,speed]);
+  return <span>{s}{s.length<(text||"").length&&<span style={{animation:"blink 0.7s infinite",borderRight:"2px solid currentColor",marginLeft:1}}/>}</span>;
+}
+
+const CS={
+  dark:{name:"다크 브라운",emoji:"🤎",bg:"linear-gradient(170deg,#1a0f0a,#2c1810,#3d2b1f)",accent:"#c8a882",textColor:"#faf6f0",subText:"rgba(250,246,240,0.7)",fontMain:"'Nanum Myeongjo',serif",fontSub:"'Cormorant Garamond',serif",envBg:"linear-gradient(135deg,#c8a882,#e8d5b8)",envTx:"#2c1810",mBg:"rgba(44,24,16,0.97)",sc:["#c8a882","#e8d5b8","#fff8f0","#f5deb3","#d4af7a"]},
+  white:{name:"화이트",emoji:"🤍",bg:"linear-gradient(170deg,#f8f6f3,#fff,#f5f3f0)",accent:"#b8977e",textColor:"#2c2c2c",subText:"rgba(44,44,44,0.6)",fontMain:"'Nanum Myeongjo',serif",fontSub:"'Cormorant Garamond',serif",envBg:"linear-gradient(135deg,#2c2c2c,#555)",envTx:"#fff",mBg:"rgba(248,246,243,0.97)",sc:["#b8977e","#d4a574","#c8a882","#8b6347","#e8c9a0"]},
+  midnight:{name:"미드나잇",emoji:"🌙",bg:"linear-gradient(170deg,#0a0e27,#141852,#1a1a3e)",accent:"#8b9cf7",textColor:"#e8e6ff",subText:"rgba(232,230,255,0.6)",fontMain:"'Nanum Myeongjo',serif",fontSub:"'Cormorant Garamond',serif",envBg:"linear-gradient(135deg,#6c7bf7,#a78bfa)",envTx:"#fff",mBg:"rgba(10,14,39,0.97)",sc:["#fff","#c8d4ff","#8b9cf7","#a78bfa","#e8e6ff"]},
+  pink:{name:"벚꽃",emoji:"🌸",bg:"linear-gradient(170deg,#2d1b2e,#3d1f3a,#4a2040)",accent:"#f8a4b8",textColor:"#fce4ec",subText:"rgba(252,228,236,0.6)",fontMain:"'Nanum Myeongjo',serif",fontSub:"'Cormorant Garamond',serif",envBg:"linear-gradient(135deg,#f8a4b8,#f48fb1)",envTx:"#2d1b2e",mBg:"rgba(45,27,46,0.97)",sc:["#ffb3c6","#ff8fab","#ffc8d5","#fff","#f8a4b8"]},
+  vintage:{name:"빈티지",emoji:"📜",bg:"linear-gradient(170deg,#3e2f1c,#5a4630,#4a3b28)",accent:"#8b7355",textColor:"#e8dcc8",subText:"rgba(232,220,200,0.6)",fontMain:"'Nanum Myeongjo',serif",fontSub:"'Cormorant Garamond',serif",envBg:"linear-gradient(135deg,#8b7355,#b09a78)",envTx:"#fff",mBg:"rgba(62,47,28,0.97)",sc:["#e8dcc8","#c8b89a","#f5ead8","#d4c4aa","#b09a78"]}
+};
+
+// 별 파티클 - 버튼 앞뒤 입체감
+function Stars({S}){
+  const bg=[],bk=[],fr=[];
+  const palette=["#ffffff","#a8d8ff","#ffb3d9","#98ffdc","#d4b8ff","#ffd97d","#ff9eb5","#b8ffb8"];
+  // 무작위 시드 (순서 아닌 랜덤 느낌)
+  const rnd=(i,m)=>((i*73+17)*(i*31+11))%m;
+  for(let i=0;i<8;i++)bg.push({id:i,l:rnd(i+1,90)+3,t:rnd(i+3,80)+5,dl:rnd(i,40)*0.1,dr:1.6+(rnd(i+5,20)*0.1),sz:3+(rnd(i+2,4)),c:palette[rnd(i,8)],ch:i%3===0?"·":i%3===1?"✦":"★",op:0.1+(rnd(i+7,15)*0.01)});
+  // 뒤쪽 별 - 버튼 뒤로 (3개, 무작위 위치)
+  for(let i=0;i<3;i++)bk.push({id:i,l:rnd(i*7+3,80)+8,dl:rnd(i*5,50)*0.1,dr:3+rnd(i*3,20)*0.1,sz:5+rnd(i*4,5),c:palette[rnd(i*6,8)],ch:"✦"});
+  // 앞쪽 별 - 버튼 앞으로, 텍스트 높이(zIndex:4)보다 낮은 zIndex:5로 텍스트 아래서 사라짐 (6개, 무작위)
+  for(let i=0;i<6;i++)fr.push({id:i,l:rnd(i*11+5,82)+6,dl:rnd(i*9+1,55)*0.1,dr:2.2+rnd(i*7,22)*0.1,sz:7+rnd(i*6,8),c:palette[rnd(i*4+2,8)],ch:i%2===0?"✦":"★"});
+  return <div style={{position:"absolute",inset:0,overflow:"hidden",pointerEvents:"none"}}>
+    {bg.map(s=><div key={"bg"+s.id} style={{position:"absolute",left:s.l+"%",top:s.t+"%",fontSize:s.sz,color:s.c,opacity:s.op,animation:`twinkle ${s.dr}s ease-in-out ${s.dl}s infinite`,zIndex:1}}>{s.ch}</div>)}
+    {bk.map(s=><div key={"bk"+s.id} style={{position:"absolute",left:s.l+"%",bottom:-10,fontSize:s.sz,color:s.c,opacity:0,animation:`starBack ${s.dr}s ease-out ${s.dl}s infinite`,zIndex:3}}>{s.ch}</div>)}
+    {fr.map(s=><div key={"fr"+s.id} style={{position:"absolute",left:s.l+"%",bottom:-10,fontSize:s.sz,color:s.c,opacity:0,animation:`starFront ${s.dr}s ease-out ${s.dl}s infinite`,zIndex:5,textShadow:`0 0 8px ${s.c}`}}>{s.ch}</div>)}
+  </div>;
+}
+
+// 여러 곡 순서대로 재생하는 훅
+function useMusic(musicList,musicFile){
+  const aRef=useRef(null);
+  const [pl,setPl]=useState(false);
+  const [idx,setIdx]=useState(0);
+  const list=musicList&&musicList.length>0?musicList:(musicFile?[{src:musicFile,name:"배경음악"}]:[]);
+  const curName=list[idx]?.name||"배경음악";
+  const curSrc=list[idx]?.src||null;
+
+  function tog(){
+    const a=aRef.current;if(!a)return;
+    if(pl){a.pause();setPl(false);}
+    else{a.play().catch(()=>{});setPl(true);}
+  }
+  function handleEnded(){
+    if(list.length<=1)return;
+    const next=(idx+1)%list.length;
+    setIdx(next);
+  }
+  useEffect(()=>{
+    const a=aRef.current;if(!a||!pl)return;
+    a.play().catch(()=>{});
+  },[idx]);
+
+  function startPlay(){
+    if(aRef.current&&list.length>0){aRef.current.play().catch(()=>{});setPl(true);}
+  }
+  return{aRef,pl,setPl,tog,curSrc,curName,handleEnded,startPlay};
+}
+
+function TopBar({cur,onChange,bg,ac,playing,onMusic,mName}){
+  const [showMenu,setShowMenu]=useState(false);
+  const labels={1:"💌 클래식",2:"✍️ 타이핑",3:"🎬 영화",4:"📖 매거진",5:"📝 노트"};
+  return <div style={{position:"sticky",top:0,background:bg,backdropFilter:"blur(20px)",padding:"10px 14px",display:"flex",alignItems:"center",gap:8,zIndex:100,borderBottom:`1px solid ${ac}22`}}>
+    <div onClick={onMusic} style={{width:32,height:32,borderRadius:"50%",background:ac+"22",border:`1px solid ${ac}44`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:12,flexShrink:0}}>{playing?"❚❚":"▶"}</div>
+    <div style={{flex:1,fontSize:11,color:ac,letterSpacing:1,opacity:0.85,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",fontWeight:500}} onClick={onMusic}>♪ {mName||"배경음악"}</div>
+    <div style={{display:"flex",alignItems:"flex-end",gap:2,height:12,marginRight:4}}>
+      {[0,0.15,0.3,0.1,0.25].map((d,i)=><div key={i} style={{width:2,background:ac,borderRadius:2,height:playing?undefined:3,animation:playing?`wave 1s ease-in-out infinite ${d}s`:"none"}}/>)}
+    </div>
+    {/* 🎨 버튼 1개 - 통통 튀는 애니메이션 */}
+    <div style={{position:"relative"}}>
+      <button onClick={()=>setShowMenu(m=>!m)}
+        style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${ac},${ac}bb)`,border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,animation:"designBounce 3s ease-in-out infinite, designGlow 2s ease-in-out infinite",flexShrink:0,boxShadow:`0 0 12px ${ac}88`}}>
+        🎨
+      </button>
+      {showMenu&&<div style={{position:"absolute",right:0,top:44,background:"rgba(20,20,20,0.97)",backdropFilter:"blur(20px)",borderRadius:12,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.5)",minWidth:140,zIndex:200}}>
+        {[{id:1,e:"💌",n:"클래식 편지"},{id:2,e:"✍️",n:"타이핑 편지"},{id:3,e:"🎬",n:"영화 크레딧"},{id:4,e:"📖",n:"감성 매거진"},{id:5,e:"📝",n:"손편지 노트"}].map(t=><div key={t.id} onClick={()=>{onChange(t.id);setShowMenu(false);}}
+          style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:t.id===cur?ac+"33":"transparent",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <span style={{fontSize:16}}>{t.e}</span>
+          <span style={{fontSize:12,color:t.id===cur?ac:"rgba(255,255,255,0.7)",fontWeight:t.id===cur?700:400}}>{t.n}</span>
+          {t.id===cur&&<span style={{marginLeft:"auto",fontSize:10,color:ac}}>✓</span>}
+        </div>)}
+      </div>}
+    </div>
+  </div>;
+}
+
+// T1 클래식
+function T1({data:d,onBack,onCh}){
+  const S=CS[d.style||"dark"];
+  const [open,setOpen]=useState(false);
+  const [view,setView]=useState(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
+  const ytId=parseYt(d.videoUrl||"");
+  const now=new Date(),def=now.getFullYear()+"년 "+(now.getMonth()+1)+"월 "+now.getDate()+"일";
+  return <div style={{minHeight:"100vh",background:S.bg,color:S.textColor,fontFamily:S.fontMain,position:"relative"}}>
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(255,255,255,0.9)",color:"#333",cursor:"pointer"}}>← 편집</button>
+    {!open&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px 28px",position:"relative",overflow:"hidden"}}>
+      <Stars S={S}/>
+      <div style={{position:"relative",zIndex:4,animation:"fadeIn 1.2s ease"}}>
+        <div style={{fontFamily:S.fontSub,fontSize:13,letterSpacing:6,color:S.accent,opacity:0.8,textTransform:"uppercase"}}>A Letter For You</div>
+        <div style={{fontSize:36,fontWeight:800,marginTop:16,letterSpacing:4,animation:"fadeUp 0.8s ease 0.3s both"}}>{d.envelopeTo||"사랑하는 당신에게"}</div>
+        <div style={{width:60,height:1,background:S.accent,margin:"28px auto",opacity:0.4}}/>
+        <div style={{fontFamily:S.fontSub,fontSize:14,color:S.accent,opacity:0.6,letterSpacing:3}}>{d.letterDate||def}</div>
+      </div>
+      {/* 버튼은 별도 div로 zIndex:6 — 뒤별(3)은 뒤로, 앞별(8)은 앞으로 통과 */}
+      <div style={{position:"relative",zIndex:6,marginTop:36}}>
+        <button onClick={()=>{setOpen(true);startPlay();}}
+          style={{fontFamily:S.fontMain,fontSize:16,color:S.envTx,background:S.envBg,border:"none",padding:"18px 52px",borderRadius:50,cursor:"pointer",letterSpacing:3,fontWeight:700,animation:"pulse 2s infinite",boxShadow:`0 8px 32px ${S.accent}44`}}>
+          편지 열기
+        </button>
+      </div>
+    </div>}
+    {open&&<div style={{animation:"fadeUp 0.8s ease"}}>
+      <TopBar cur={1} onChange={onCh} bg={S.mBg} ac={S.accent} playing={pl} onMusic={tog} mName={curName}/>
+      {(d.heroPhoto||d.heroVideo)&&<div style={{width:"100%",height:"100vh",position:"relative",overflow:"hidden"}}>
+        {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.45)"}}/>
+          :<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.45)"}}/>}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"60px 28px 40px",background:"linear-gradient(transparent,rgba(0,0,0,0.7))"}}>
+          <div style={{fontFamily:S.fontSub,fontSize:13,letterSpacing:6,color:S.accent,opacity:0.7}}>{d.letterDate||def}</div>
+          <div style={{fontSize:28,fontWeight:800,lineHeight:1.6,marginTop:12,letterSpacing:2,color:"#fff"}}>너에게<br/>보내는 편지</div>
+        </div>
+      </div>}
+      <div style={{maxWidth:440,margin:"0 auto",padding:(d.heroPhoto||d.heroVideo)?"0":"40px 0 0"}}>
+        {!(d.heroPhoto||d.heroVideo)&&<div style={{fontFamily:S.fontSub,fontSize:18,color:S.accent,textAlign:"right",padding:"20px 28px 0",opacity:0.7}}>{d.letterDate||def}</div>}
+        <div style={{padding:"48px 28px 32px"}}>
+          <div style={{fontFamily:S.fontSub,fontSize:26,color:S.textColor,marginBottom:24,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{d.greeting||"사랑하는 당신에게"}</div>
+          {d.text1&&<div style={{fontSize:17,lineHeight:2.2,color:S.subText,whiteSpace:"pre-wrap",wordBreak:"keep-all"}}>{d.text1}</div>}
+        </div>
+        {d.photos1?.length>0&&<div style={{textAlign:"center",padding:"32px 0",opacity:0.4}}><span style={{fontFamily:S.fontSub,fontSize:20,color:S.accent,letterSpacing:8}}>✦</span></div>}
+        {d.photos1?.length>0&&<div style={{padding:"0 0 32px"}}><div style={{fontFamily:S.fontSub,fontSize:12,letterSpacing:8,textTransform:"uppercase",color:S.accent,textAlign:"center",marginBottom:20,opacity:0.6}}>우 리 의 추 억</div><StackGallery photos={d.photos1} s={S}/></div>}
+        {d.videos1?.length>0&&<div style={{padding:"0 28px 32px"}}><InlineVideos videos={d.videos1} accent={S.accent}/></div>}
+        {d.text2&&<div style={{padding:"32px 28px"}}><div style={{fontSize:17,lineHeight:2.2,color:S.subText,whiteSpace:"pre-wrap",wordBreak:"keep-all"}}>{d.text2}</div></div>}
+        {d.photos2?.length>0&&<div style={{width:"100%",position:"relative",overflow:"hidden",margin:"24px 0",cursor:"zoom-in"}} onClick={()=>setView(d.photos2[0])}>
+          <img src={d.photos2[0].src} alt="" style={{width:"100%",height:"70vh",objectFit:"cover",filter:"brightness(0.5)"}}/>
+          <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",textAlign:"center",width:"80%"}}>
+            <h2 style={{fontSize:24,fontWeight:800,letterSpacing:4,textShadow:"0 2px 20px rgba(0,0,0,0.5)",lineHeight:1.6,color:"#fff",whiteSpace:"pre-wrap"}}>{d.photos2[0].cap||"함께 걸었던\n모든 길이\n사랑이었다"}</h2>
+          </div>
+        </div>}
+        {d.photos2?.length>1&&<div style={{padding:"20px 0 32px"}}><div style={{fontFamily:S.fontSub,fontSize:12,letterSpacing:8,textTransform:"uppercase",color:S.accent,textAlign:"center",marginBottom:20,opacity:0.6}}>우 리 의 일 상</div><SliderGallery photos={d.photos2.slice(1)} s={S}/></div>}
+        {d.videos2?.length>0&&<div style={{padding:"0 28px 32px"}}><InlineVideos videos={d.videos2} accent={S.accent}/></div>}
+        {d.text3&&<div style={{textAlign:"center",padding:"32px 0",opacity:0.4}}><span style={{fontFamily:S.fontSub,fontSize:20,color:S.accent,letterSpacing:8}}>✦ ✦</span></div>}
+        {d.text3&&<div style={{padding:"32px 28px"}}>
+          <div style={{fontSize:17,lineHeight:2.2,color:S.subText,whiteSpace:"pre-wrap",wordBreak:"keep-all",marginBottom:24}}>{d.text3}</div>
+          <div style={{fontFamily:S.fontSub,fontSize:20,fontStyle:"italic",textAlign:"right",color:S.accent,paddingRight:20,letterSpacing:2,whiteSpace:"pre-wrap"}}>{d.closing||"사랑을 담아"}</div>
+        </div>}
+        {d.photos3?.length>0&&<div style={{padding:"20px 0 32px"}}><div style={{fontFamily:S.fontSub,fontSize:12,letterSpacing:8,textTransform:"uppercase",color:S.accent,textAlign:"center",marginBottom:20,opacity:0.6}}>우 리 의 순 간 들</div><GridGallery photos={d.photos3}/></div>}
+        {d.videos3?.length>0&&<div style={{padding:"0 28px 32px"}}><InlineVideos videos={d.videos3} accent={S.accent}/></div>}
+        {(ytId.length===11||d.localVideo)&&<div style={{padding:"20px 28px 40px"}}><div style={{fontFamily:S.fontSub,fontSize:12,letterSpacing:8,textTransform:"uppercase",color:S.accent,textAlign:"center",marginBottom:20,opacity:0.6}}>Our Story</div><VideoBlock ytId={ytId} localVideo={d.localVideo}/></div>}
+        <div style={{textAlign:"center",padding:"40px 0",opacity:0.4}}><span style={{fontFamily:S.fontSub,fontSize:20,color:S.accent,letterSpacing:8}}>✦ ✦ ✦</span></div>
+        <div style={{textAlign:"center",padding:"32px 28px 80px"}}>
+          <div style={{fontSize:48,display:"inline-block",animation:"heartbeat 1.5s ease-in-out infinite"}}>💕</div>
+          <div style={{fontSize:20,fontWeight:700,marginTop:24,lineHeight:1.8,letterSpacing:2,whiteSpace:"pre-wrap"}}>{d.footerText||"사랑해, 영원히."}</div>
+          <div style={{fontFamily:S.fontSub,fontSize:14,color:S.accent,marginTop:24,letterSpacing:4,opacity:0.6}}>Forever & Always</div>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// T2 타이핑 편지
+function T2({data:d,onBack,onCh}){
+  const [phase,setPhase]=useState(0);
+  const [bi,setBi]=useState(0);
+  const [view,setView]=useState(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
+  const ytId=parseYt(d.videoUrl||"");
+  const now=new Date(),def=now.getFullYear()+"년 "+(now.getMonth()+1)+"월 "+now.getDate()+"일";
+  const blocks=[
+    {text:d.greeting||"사랑하는 당신에게",big:true},
+    {text:d.text1,photos:d.photos1,videos:d.videos1},
+    {text:d.text2,photos:d.photos2,videos:d.videos2},
+    {text:d.text3,photos:d.photos3,videos:d.videos3},
+    {text:d.closing||(d.sender?"사랑을 담아, "+d.sender:"사랑을 담아"),closing:true},
+  ].filter(b=>b.text||(b.photos?.length>0)||(b.videos?.length>0));
+  const ink="#2c1810",paper="#fdf6ec";
+  const ls={backgroundImage:"repeating-linear-gradient(transparent,transparent 39px,rgba(180,150,100,0.12) 39px,rgba(180,150,100,0.12) 40px)",backgroundSize:"100% 40px"};
+  return <div style={{minHeight:"100vh",background:paper,color:ink,fontFamily:"'Nanum Pen Script',cursive",position:"relative"}}>
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(44,24,16,0.85)",color:"#fdf6ec",cursor:"pointer",fontFamily:"'Noto Sans KR',sans-serif"}}>← 편집</button>
+    {phase===0&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",position:"relative",overflow:"hidden",background:"linear-gradient(160deg,#fdf6ec,#f5e8d0)"}}>
+      <div style={{position:"absolute",inset:0,backgroundImage:"repeating-linear-gradient(transparent,transparent 39px,rgba(180,150,100,0.15) 39px,rgba(180,150,100,0.15) 40px)",pointerEvents:"none"}}/>
+      <div style={{position:"relative",zIndex:2,textAlign:"center",maxWidth:320}}>
+        <div style={{fontSize:40,marginBottom:24,animation:"float 3s ease-in-out infinite"}}>✉️</div>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:13,letterSpacing:6,color:"#8b7355",marginBottom:16,textTransform:"uppercase",opacity:0.8}}>A Letter For You</div>
+        <div style={{fontSize:34,lineHeight:1.4,marginBottom:8,color:ink}}>{d.envelopeTo||"사랑하는 당신에게"}</div>
+        <div style={{width:80,height:1,background:"rgba(139,115,85,0.4)",margin:"20px auto"}}/>
+        <div style={{fontFamily:"'Noto Sans KR',sans-serif",fontSize:12,color:"#8b7355",marginBottom:32}}>{d.letterDate||def}</div>
+        <button onClick={()=>{setPhase(1);startPlay();}}
+          style={{fontFamily:"'Nanum Pen Script',cursive",fontSize:20,color:"#fdf6ec",background:"linear-gradient(135deg,#5d4037,#3e2723)",border:"none",padding:"16px 44px",borderRadius:4,cursor:"pointer",letterSpacing:2,boxShadow:"0 4px 20px rgba(93,64,55,0.4)",animation:"pulse 2s infinite"}}>
+          편지 열기 ✉
+        </button>
+      </div>
+    </div>}
+    {phase===1&&<div>
+      <TopBar cur={2} onChange={onCh} bg="rgba(253,246,236,0.97)" ac="#8b7355" playing={pl} onMusic={tog} mName={curName}/>
+      <div style={{maxWidth:480,margin:"0 auto",padding:"0 0 80px",position:"relative"}}>
+        <div style={{position:"fixed",inset:0,...ls,pointerEvents:"none",zIndex:0}}/>
+        {(d.heroPhoto||d.heroVideo)&&<div style={{width:"100%",height:"55vw",maxHeight:260,overflow:"hidden",position:"relative"}}>
+          {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{width:"100%",height:"100%",objectFit:"cover",filter:"sepia(20%) brightness(0.85)"}}/>
+            :<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"sepia(20%) brightness(0.85)"}}/>}
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(transparent 50%,rgba(253,246,236,0.9))"}}/>
+        </div>}
+        <div style={{padding:"40px 32px 0",position:"relative",zIndex:1}}>
+          <div style={{fontSize:18,color:"#8b7355",textAlign:"right",marginBottom:32}}>{d.letterDate||def}</div>
+          {blocks.map((b,idx)=><div key={idx} style={{marginBottom:32}}>
+            {b.big
+              ?<div style={{fontSize:28,lineHeight:1.7,marginBottom:24,color:ink}}><TypeWriter text={b.text} speed={60} delay={300} onDone={()=>{if(idx===bi)setBi(idx+1);}}/></div>
+              :<div style={{fontSize:20,lineHeight:1.9,color:ink,whiteSpace:"pre-wrap",wordBreak:"keep-all"}}>
+                {bi>=idx&&<TypeWriter text={b.text||""} speed={35} delay={0} onDone={()=>{if(idx===bi)setBi(idx+1);}}/>}
+              </div>}
+            {b.photos?.length>0&&bi>idx&&<div style={{margin:"24px -8px",animation:"popIn 0.5s ease"}}>
+              <div style={{display:"flex",gap:8,overflowX:"auto",padding:"0 8px"}}>
+                {b.photos.map((p,pi)=><div key={pi} onClick={()=>setView(p)} style={{flexShrink:0,background:"#fff",padding:"6px 6px 22px",boxShadow:"2px 4px 16px rgba(0,0,0,0.15)",transform:`rotate(${(pi%3-1)*2.5}deg)`,cursor:"zoom-in"}}>
+                  <img src={p.src} alt="" style={{width:140,height:140,objectFit:"cover",display:"block"}}/>
+                  {p.cap&&<div style={{fontSize:12,textAlign:"center",marginTop:4,color:"#666"}}>{p.cap}</div>}
+                </div>)}
+              </div>
+            </div>}
+            {b.videos?.length>0&&bi>idx&&<div style={{margin:"16px 0",animation:"fadeIn 0.5s ease"}}><InlineVideos videos={b.videos} accent="#8b7355"/></div>}
+            {!b.closing&&idx<blocks.length-1&&bi>idx&&<div style={{textAlign:"center",padding:"16px 0"}}><span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:16,color:"rgba(139,115,85,0.5)",letterSpacing:8}}>✦</span></div>}
+          </div>)}
+          {(ytId.length===11||d.localVideo)&&bi>=blocks.length&&<div style={{margin:"32px 0",animation:"fadeUp 0.8s ease"}}>
+            <div style={{fontSize:18,color:"#8b7355",textAlign:"center",marginBottom:12}}>📼 우리의 영상</div>
+            <VideoBlock ytId={ytId} localVideo={d.localVideo}/>
+          </div>}
+          {bi>=blocks.length&&<div style={{textAlign:"center",padding:"40px 0 60px",animation:"fadeUp 1s ease"}}>
+            <div style={{fontSize:40,animation:"heartbeat 1.5s ease-in-out infinite"}}>💕</div>
+            <div style={{fontSize:22,lineHeight:1.8,marginTop:20,whiteSpace:"pre-wrap"}}>{d.footerText||"사랑해, 영원히."}</div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:13,color:"#8b7355",marginTop:16,letterSpacing:4,opacity:0.7}}>Forever & Always</div>
+          </div>}
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// T3 영화 크레딧
+function T3({data:d,onBack,onCh}){
+  const [started,setStarted]=useState(false);
+  const [view,setView]=useState(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
+  const ytId=parseYt(d.videoUrl||"");
+  const now=new Date(),def=now.getFullYear()+"."+String(now.getMonth()+1).padStart(2,"0")+"."+String(now.getDate()).padStart(2,"0");
+  const chs=[{ch:"I",text:d.text1,photos:d.photos1,vids:d.videos1},{ch:"II",text:d.text2,photos:d.photos2,vids:d.videos2},{ch:"III",text:d.text3,photos:d.photos3,vids:d.videos3}];
+  return <div style={{minHeight:"100vh",background:"#000",color:"#fff",position:"relative"}}>
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>← 편집</button>
+    {!started&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",position:"relative"}}>
+      {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.2)"}}/>
+        :d.heroPhoto&&<img src={d.heroPhoto} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.2)"}}/>}
+      <div style={{position:"relative",zIndex:2,textAlign:"center",padding:"40px 32px"}}>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:8,color:"rgba(255,255,255,0.4)",marginBottom:32,textTransform:"uppercase"}}>A Film By Love</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontStyle:"italic",lineHeight:1.2,marginBottom:8}}>{d.envelopeTo||d.receiver||"당신에게"}</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"rgba(255,255,255,0.3)",letterSpacing:4,marginBottom:48}}>{d.letterDate||def}</div>
+        <div style={{width:1,height:40,background:"rgba(255,255,255,0.2)",margin:"0 auto 40px"}}/>
+        <button onClick={()=>{setStarted(true);startPlay();}}
+          style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:6,color:"#fff",background:"transparent",border:"1px solid rgba(255,255,255,0.4)",padding:"14px 40px",cursor:"pointer",textTransform:"uppercase",animation:"pulse 2s infinite"}}>PLAY</button>
+      </div>
+    </div>}
+    {started&&<div>
+      <TopBar cur={3} onChange={onCh} bg="rgba(0,0,0,0.95)" ac="rgba(255,255,255,0.5)" playing={pl} onMusic={tog} mName={curName}/>
+      {(d.heroPhoto||d.heroVideo)&&<div style={{width:"100%",height:"100vh",position:"relative"}}>
+        {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.25)"}}/>
+          :<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.25)"}}/>}
+        <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,letterSpacing:8,color:"rgba(255,255,255,0.3)",marginBottom:24,textTransform:"uppercase"}}>Opening</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:32,fontStyle:"italic",lineHeight:1.5,animation:"fadeIn 2s ease"}}>{d.greeting||"사랑하는 당신에게"}</div>
+        </div>
+      </div>}
+      {chs.map((b,i)=>{
+        if(!b.text&&!b.photos?.length&&!b.vids?.length)return null;
+        return <div key={i} style={{minHeight:"80vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"80px 40px",borderTop:"1px solid rgba(255,255,255,0.05)"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:8,color:"rgba(255,255,255,0.2)",marginBottom:32,textTransform:"uppercase"}}>Chapter {b.ch}</div>
+          {b.photos?.length>0&&<div style={{marginBottom:40,cursor:"zoom-in"}} onClick={()=>setView(b.photos[0])}><div style={{width:"100%",height:"50vh",overflow:"hidden"}}><img src={b.photos[0].src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.6) grayscale(20%)"}}/></div></div>}
+          {b.text&&<div style={{fontFamily:"'Nanum Myeongjo',serif",fontSize:16,lineHeight:2.4,color:"rgba(255,255,255,0.7)",whiteSpace:"pre-wrap",wordBreak:"keep-all"}}>{b.text}</div>}
+          {b.photos?.length>1&&<div style={{display:"flex",gap:8,marginTop:32,overflowX:"auto"}}>{b.photos.slice(1).map((p,j)=><div key={j} onClick={()=>setView(p)} style={{flexShrink:0,width:120,height:120,cursor:"zoom-in"}}><img src={p.src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"grayscale(20%) brightness(0.7)"}}/></div>)}</div>}
+          {b.vids?.length>0&&<div style={{marginTop:24}}><InlineVideos videos={b.vids} accent="rgba(255,255,255,0.4)"/></div>}
+        </div>;
+      })}
+      {(ytId.length===11||d.localVideo)&&<div style={{padding:"60px 40px"}}><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:8,color:"rgba(255,255,255,0.2)",marginBottom:24,textTransform:"uppercase",textAlign:"center"}}>Our Film</div><VideoBlock ytId={ytId} localVideo={d.localVideo}/></div>}
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"60px 40px",borderTop:"1px solid rgba(255,255,255,0.05)"}}>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:8,color:"rgba(255,255,255,0.2)",marginBottom:48,textTransform:"uppercase"}}>Credits</div>
+        <div style={{marginBottom:32}}><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:3,marginBottom:8}}>WRITTEN & DIRECTED BY</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontStyle:"italic"}}>{d.sender||"당신의 사람"}</div></div>
+        <div style={{width:1,height:32,background:"rgba(255,255,255,0.1)",margin:"0 auto 32px"}}/>
+        <div style={{fontFamily:"'Nanum Myeongjo',serif",fontSize:18,lineHeight:1.9,color:"rgba(255,255,255,0.6)",whiteSpace:"pre-wrap"}}>{d.footerText||d.closing||"사랑해, 영원히."}</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"rgba(255,255,255,0.15)",letterSpacing:4,marginTop:60}}>THE END</div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// T4 감성 매거진
+function T4({data:d,onBack,onCh}){
+  const [open,setOpen]=useState(false);
+  const [view,setView]=useState(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
+  const ytId=parseYt(d.videoUrl||"");
+  const now=new Date();
+  const months=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const ds=months[now.getMonth()]+" "+now.getDate()+", "+now.getFullYear();
+  return <div style={{minHeight:"100vh",background:"#F4F0EA",color:"#1a1a1a",fontFamily:"'Playfair Display',serif",position:"relative"}}>
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(0,0,0,0.8)",color:"#fff",cursor:"pointer"}}>← 편집</button>
+    {!open&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"24px 24px 0",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"2px solid #1a1a1a"}}>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:4,color:"#888"}}>VOL. 01</div>
+        <div style={{fontSize:20,fontWeight:700,letterSpacing:2}}>LOVE</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:2,color:"#888"}}>{d.letterDate||ds}</div>
+      </div>
+      <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:"70vh"}}>
+        {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.7) sepia(20%)"}}/>
+          :d.heroPhoto?<img src={d.heroPhoto} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.7) sepia(20%)"}}/>
+          :<div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#e8ddd0,#c4b49a)"}}/>}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"32px 24px 24px",background:"linear-gradient(transparent,rgba(244,240,234,0.97))"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:4,color:"#8b7355",marginBottom:8}}>SPECIAL EDITION</div>
+          <div style={{fontSize:40,fontWeight:700,lineHeight:1.1,marginBottom:8,letterSpacing:-1,whiteSpace:"pre-wrap"}}>{d.envelopeTo||d.receiver||"사랑하는\n당신에게"}</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#666",letterSpacing:2}}>FROM. {d.sender||"당신의 사람"}</div>
+        </div>
+      </div>
+      <div style={{padding:"24px",borderTop:"2px solid #1a1a1a"}}>
+        <button onClick={()=>{setOpen(true);startPlay();}}
+          style={{width:"100%",padding:"16px",fontSize:13,fontWeight:700,border:"2px solid #1a1a1a",background:"#1a1a1a",color:"#F4F0EA",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:4,textTransform:"uppercase"}}>READ NOW →</button>
+      </div>
+    </div>}
+    {open&&<div>
+      <TopBar cur={4} onChange={onCh} bg="#F4F0EA" ac="#8b7355" playing={pl} onMusic={tog} mName={curName}/>
+      <div style={{maxWidth:480,margin:"0 auto"}}>
+        <div style={{padding:"48px 24px 32px",borderBottom:"1px solid rgba(0,0,0,0.1)"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:5,color:"#8b7355",marginBottom:16,textTransform:"uppercase"}}>Opening</div>
+          <div style={{fontSize:28,fontWeight:700,lineHeight:1.3,marginBottom:20,whiteSpace:"pre-wrap"}}>{d.greeting||"사랑하는 당신에게"}</div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}><div style={{width:32,height:1,background:"#8b7355"}}/><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#8b7355",letterSpacing:2}}>{d.sender||"From"}</div></div>
+        </div>
+        {d.text1&&<div style={{padding:"32px 24px",borderBottom:"1px solid rgba(0,0,0,0.08)"}}><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:8,letterSpacing:5,color:"#8b7355",marginBottom:16,textTransform:"uppercase"}}>Chapter 01</div><div style={{fontSize:15,lineHeight:2.2,color:"#333",whiteSpace:"pre-wrap",wordBreak:"keep-all",fontFamily:"'Nanum Myeongjo',serif"}}>{d.text1}</div></div>}
+        {d.photos1?.length>0&&<div><div onClick={()=>setView(d.photos1[0])} style={{width:"100%",height:"60vw",overflow:"hidden",cursor:"zoom-in"}}><img src={d.photos1[0].src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"sepia(10%)"}}/></div>{d.photos1.length>1&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,marginTop:2}}>{d.photos1.slice(1,3).map((p,i)=><div key={i} onClick={()=>setView(p)} style={{height:"35vw",overflow:"hidden",cursor:"zoom-in"}}><img src={p.src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"sepia(10%)"}}/></div>)}</div>}</div>}
+        {d.videos1?.length>0&&<div style={{padding:"8px 24px 16px"}}><InlineVideos videos={d.videos1} accent="#8b7355"/></div>}
+        {d.text2&&<div style={{background:"#1a1a1a",color:"#F4F0EA",padding:"48px 24px",position:"relative",overflow:"hidden"}}><div style={{fontFamily:"'Playfair Display',serif",fontSize:48,fontStyle:"italic",color:"rgba(255,255,255,0.06)",position:"absolute",top:-10,left:16,lineHeight:1}}>"</div><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:8,letterSpacing:5,color:"rgba(255,255,255,0.3)",marginBottom:20,textTransform:"uppercase"}}>Chapter 02</div><div style={{fontSize:16,lineHeight:2.2,color:"rgba(255,255,255,0.8)",whiteSpace:"pre-wrap",wordBreak:"keep-all",fontFamily:"'Nanum Myeongjo',serif"}}>{d.text2}</div></div>}
+        {d.photos2?.length>0&&<div style={{overflowX:"auto",display:"flex",padding:"32px 0 32px 24px"}}>{d.photos2.map((p,i)=><div key={i} onClick={()=>setView(p)} style={{flexShrink:0,width:"65vw",height:"80vw",marginRight:8,overflow:"hidden",border:"1px solid rgba(0,0,0,0.1)",cursor:"zoom-in"}}><img src={p.src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"sepia(5%)"}}/></div>)}</div>}
+        {d.videos2?.length>0&&<div style={{padding:"0 24px 16px"}}><InlineVideos videos={d.videos2} accent="#8b7355"/></div>}
+        {d.text3&&<div style={{padding:"32px 24px 40px",borderTop:"1px solid rgba(0,0,0,0.08)"}}><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:8,letterSpacing:5,color:"#8b7355",marginBottom:16,textTransform:"uppercase"}}>Chapter 03</div><div style={{fontSize:15,lineHeight:2.2,color:"#333",whiteSpace:"pre-wrap",wordBreak:"keep-all",fontFamily:"'Nanum Myeongjo',serif",marginBottom:32}}>{d.text3}</div><div style={{display:"flex",justifyContent:"flex-end"}}><div style={{textAlign:"right"}}><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#888",letterSpacing:3,marginBottom:6}}>With Love,</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontStyle:"italic"}}>{d.closing||d.sender||"당신의 사람"}</div></div></div></div>}
+        {d.photos3?.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2}}>{d.photos3.map((p,i)=><div key={i} onClick={()=>setView(p)} style={{paddingBottom:"100%",position:"relative",overflow:"hidden",cursor:"zoom-in"}}><img src={p.src} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"sepia(10%)"}}/></div>)}</div>}
+        {d.videos3?.length>0&&<div style={{padding:"8px 24px 16px"}}><InlineVideos videos={d.videos3} accent="#8b7355"/></div>}
+        {(ytId.length===11||d.localVideo)&&<div style={{padding:"0 24px 32px"}}><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:8,letterSpacing:5,color:"#8b7355",marginBottom:16,textTransform:"uppercase"}}>Our Story</div><VideoBlock ytId={ytId} localVideo={d.localVideo}/></div>}
+        <div style={{background:"#1a1a1a",color:"#F4F0EA",padding:"60px 24px 80px",textAlign:"center"}}>
+          <div style={{fontSize:20,fontWeight:700,letterSpacing:2,marginBottom:32}}>LOVE</div>
+          <div style={{width:40,height:1,background:"rgba(255,255,255,0.2)",margin:"0 auto 32px"}}/>
+          <div style={{fontFamily:"'Nanum Myeongjo',serif",fontSize:18,lineHeight:1.9,color:"rgba(255,255,255,0.8)",whiteSpace:"pre-wrap"}}>{d.footerText||"사랑해, 영원히."}</div>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// T5 손편지 노트
+function T5({data:d,onBack,onCh}){
+  const [open,setOpen]=useState(false);
+  const [view,setView]=useState(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
+  const ytId=parseYt(d.videoUrl||"");
+  const now=new Date(),def=(now.getMonth()+1)+"월 "+now.getDate()+"일, "+now.getFullYear();
+  const ls={backgroundImage:"repeating-linear-gradient(transparent, transparent 31px, #c8b89a 31px, #c8b89a 32px)",backgroundSize:"100% 32px"};
+  return <div style={{minHeight:"100vh",background:"#f0e8d8",color:"#2c1810",fontFamily:"'Nanum Pen Script',cursive",position:"relative"}}>
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
+    {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
+    <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(44,24,16,0.8)",color:"#f0e8d8",cursor:"pointer",fontFamily:"'Noto Sans KR',sans-serif"}}>← 편집</button>
+    {!open&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",background:"linear-gradient(160deg,#f0e8d8,#e4d4b8)"}}>
+      <div style={{width:"100%",maxWidth:340,background:"#e8dcca",border:"1px solid #c8b89a",padding:"32px 28px",position:"relative",boxShadow:"4px 4px 0 rgba(0,0,0,0.1),8px 8px 0 rgba(0,0,0,0.05)"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:0,borderLeft:"170px solid transparent",borderRight:"170px solid transparent",borderTop:"60px solid #d4c4aa",pointerEvents:"none"}}/>
+        <div style={{marginTop:40,textAlign:"center"}}>
+          <div style={{fontSize:13,color:"#8b7355",fontFamily:"'Noto Sans KR',sans-serif",marginBottom:12,fontWeight:300,letterSpacing:4}}>TO.</div>
+          <div style={{fontSize:36,lineHeight:1.3,marginBottom:24}}>{d.envelopeTo||d.receiver||"사랑하는 당신에게"}</div>
+          <div style={{width:"100%",height:1,background:"#c8b89a",marginBottom:20}}/>
+          <div style={{fontSize:14,color:"#8b7355",fontFamily:"'Noto Sans KR',sans-serif"}}>{d.letterDate||def}</div>
+          <div style={{marginTop:16,fontSize:11,color:"#a0907a",fontFamily:"'Noto Sans KR',sans-serif",letterSpacing:1}}>FROM. {d.sender||"당신의 사람"}</div>
+        </div>
+        <div onClick={()=>d.heroPhoto&&setView({src:d.heroPhoto,cap:""})} style={{position:"absolute",top:16,right:16,width:44,height:52,border:"1px solid #a0907a",display:"flex",alignItems:"center",justifyContent:"center",background:"#fff",overflow:"hidden",cursor:d.heroPhoto?"zoom-in":"default"}}>
+          {d.heroPhoto?<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div style={{fontSize:20}}>💌</div>}
+        </div>
+      </div>
+      <button onClick={()=>{setOpen(true);startPlay();}}
+        style={{marginTop:32,padding:"14px 36px",fontSize:18,color:"#2c1810",background:"transparent",border:"2px solid #8b7355",cursor:"pointer",fontFamily:"'Nanum Pen Script',cursive",letterSpacing:2,animation:"pulse 2s infinite"}}>
+        편지 열기 ✉
+      </button>
+    </div>}
+    {open&&<div>
+      <TopBar cur={5} onChange={onCh} bg="rgba(240,232,216,0.97)" ac="#8b7355" playing={pl} onMusic={tog} mName={curName}/>
+      <div style={{maxWidth:480,margin:"0 auto",padding:"0 0 80px"}}>
+        <div style={{...ls,padding:"32px 28px 40px",borderBottom:"2px solid #c8b89a"}}>
+          <div style={{textAlign:"right",fontSize:18,color:"#8b7355",marginBottom:32}}>{d.letterDate||def}</div>
+          <div style={{fontSize:28,lineHeight:"32px",whiteSpace:"pre-wrap"}}>{d.greeting||"사랑하는 당신에게"}</div>
+        </div>
+        {d.text1&&<div style={{...ls,padding:"40px 28px",borderBottom:"1px solid #d4c4aa"}}><div style={{fontSize:22,lineHeight:"32px",whiteSpace:"pre-wrap",wordBreak:"keep-all"}}>{d.text1}</div></div>}
+        {d.photos1?.length>0&&<div style={{padding:"32px 16px",background:"#e8dcca",borderBottom:"1px solid #c8b89a"}}>
+          <div style={{textAlign:"center",fontSize:18,color:"#8b7355",marginBottom:20}}>📎 사진을 붙였어</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:16,justifyContent:"center"}}>
+            {d.photos1.map((p,i)=><div key={i} onClick={()=>setView(p)} style={{background:"#fff",padding:"8px 8px 32px",boxShadow:"2px 2px 8px rgba(0,0,0,0.15)",transform:`rotate(${[-3,0,3][i%3]}deg)`,flexShrink:0,cursor:"zoom-in"}}>
+              <img src={p.src} alt="" style={{width:130,height:130,objectFit:"cover",display:"block"}}/>
+              {p.cap&&<div style={{fontSize:13,textAlign:"center",marginTop:8,color:"#666"}}>{p.cap}</div>}
+            </div>)}
+          </div>
+        </div>}
+        {d.videos1?.length>0&&<div style={{padding:"16px 24px",background:"#e8dcca",borderBottom:"1px solid #c8b89a"}}><InlineVideos videos={d.videos1} accent="#8b7355"/></div>}
+        {d.text2&&<div style={{...ls,padding:"40px 28px",borderBottom:"1px solid #d4c4aa"}}><div style={{fontSize:22,lineHeight:"32px",whiteSpace:"pre-wrap",wordBreak:"keep-all"}}>{d.text2}</div></div>}
+        {d.photos2?.length>0&&<div style={{padding:"32px 16px",background:"#e8dcca",borderBottom:"1px solid #c8b89a"}}><div style={{display:"flex",overflowX:"auto",gap:12,paddingBottom:8}}>{d.photos2.map((p,i)=><div key={i} onClick={()=>setView(p)} style={{flexShrink:0,background:"#fff",padding:"6px 6px 24px",boxShadow:"2px 2px 8px rgba(0,0,0,0.12)",transform:`rotate(${i%2===0?2:-2}deg)`,cursor:"zoom-in"}}><img src={p.src} alt="" style={{width:150,height:150,objectFit:"cover",display:"block"}}/></div>)}</div></div>}
+        {d.videos2?.length>0&&<div style={{padding:"16px 24px",background:"#e8dcca",borderBottom:"1px solid #c8b89a"}}><InlineVideos videos={d.videos2} accent="#8b7355"/></div>}
+        {d.text3&&<div style={{...ls,padding:"40px 28px 60px"}}>
+          <div style={{fontSize:22,lineHeight:"32px",whiteSpace:"pre-wrap",wordBreak:"keep-all",marginBottom:32}}>{d.text3}</div>
+          <div style={{textAlign:"right",marginTop:32}}>
+            <div style={{fontSize:16,color:"#8b7355",marginBottom:4}}>사랑을 담아,</div>
+            <div style={{fontSize:28}}>{d.closing||d.sender||"당신의 사람"} ❤</div>
+          </div>
+        </div>}
+        {d.photos3?.length>0&&<div style={{padding:"24px 16px",background:"#e0d4bc",borderTop:"2px solid #c8b89a",borderBottom:"2px solid #c8b89a"}}><div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center"}}>{d.photos3.map((p,i)=><div key={i} onClick={()=>setView(p)} style={{background:"#fff",padding:"4px",boxShadow:"1px 1px 4px rgba(0,0,0,0.1)",transform:`rotate(${[-4,-2,0,2,4][i%5]}deg)`,cursor:"zoom-in"}}><img src={p.src} alt="" style={{width:90,height:90,objectFit:"cover",display:"block"}}/></div>)}</div></div>}
+        {d.videos3?.length>0&&<div style={{padding:"16px 24px",background:"#e0d4bc",borderBottom:"2px solid #c8b89a"}}><InlineVideos videos={d.videos3} accent="#8b7355"/></div>}
+        {(ytId.length===11||d.localVideo)&&<div style={{padding:"32px 24px",borderTop:"1px solid #c8b89a"}}><div style={{fontSize:20,color:"#8b7355",marginBottom:16,textAlign:"center"}}>📼 우리의 영상</div><VideoBlock ytId={ytId} localVideo={d.localVideo}/></div>}
+        <div style={{...ls,padding:"40px 28px 80px",textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:16}}>💕</div>
+          <div style={{fontSize:26,lineHeight:"32px",whiteSpace:"pre-wrap"}}>{d.footerText||"사랑해, 영원히."}</div>
+          <div style={{fontSize:18,color:"#8b7355",marginTop:32}}>— {d.sender||"당신의 사람"}</div>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ══ 메인 에디터 ══
+function App(){
+  const [page,setPage]=useState("form");
+  const [tpl,setTpl]=useState(1);
+  const [style,setStyle]=useState("dark");
+  const [sender,setSender]=useState(""); const [receiver,setReceiver]=useState("");
+  const [category,setCategory]=useState("propose");
+  const [envelopeTo,setEnvelopeTo]=useState(""); const [letterDate,setLetterDate]=useState("");
+  const [greeting,setGreeting]=useState(""); const [closing,setClosing]=useState(""); const [footerText,setFooterText]=useState("");
+  const [musicList,setMusicList]=useState([]); const [musicIdx,setMusicIdx]=useState(0);
+  const [musicFile,setMusicFile]=useState(null); const [musicName,setMusicName]=useState("");
+  const [videoUrl,setVideoUrl]=useState(""); const [localVideo,setLocalVideo]=useState(null); const [localVideoName,setLocalVideoName]=useState("");
+  const [text1,setText1]=useState(""); const [photos1,setPhotos1]=useState([]); const [videos1,setVideos1]=useState([]);
+  const [text2,setText2]=useState(""); const [photos2,setPhotos2]=useState([]); const [videos2,setVideos2]=useState([]);
+  const [text3,setText3]=useState(""); const [photos3,setPhotos3]=useState([]); const [videos3,setVideos3]=useState([]);
+  const [heroPhoto,setHeroPhoto]=useState(null); const [heroVideo,setHeroVideo]=useState(null);
+  // 개별 ref (배열 금지!)
+  const heroRef=useRef(null); const heroVRef=useRef(null); const musicRef=useRef(null); const vidRef=useRef(null);
+  const p0=useRef(null); const p1=useRef(null); const p2=useRef(null);
+  const v0=useRef(null); const v1=useRef(null); const v2=useRef(null);
+  const pRefs=[p0,p1,p2]; const vRefs=[v0,v1,v2];
+
+  const now=new Date(),def=now.getFullYear()+"년 "+(now.getMonth()+1)+"월 "+now.getDate()+"일";
+  const ytId=parseYt(videoUrl);
+
+  function addP(i,e){const fs=Array.from(e.target.files);const fns=[setPhotos1,setPhotos2,setPhotos3];fs.forEach(f=>{const r=new FileReader();r.onload=()=>fns[i](p=>[...p,{src:r.result,cap:""}]);r.readAsDataURL(f);});e.target.value="";}
+  function addV(i,e){const fs=Array.from(e.target.files);const fns=[setVideos1,setVideos2,setVideos3];fs.forEach(f=>{const r=new FileReader();r.onload=()=>fns[i](p=>[...p,{src:r.result,cap:"",name:f.name.replace(/\.[^.]+$/,"")}]);r.readAsDataURL(f);});e.target.value="";}
+  function rmP(i,j){[setPhotos1,setPhotos2,setPhotos3][i](p=>p.filter((_,k)=>k!==j));}
+  function rmV(i,j){[setVideos1,setVideos2,setVideos3][i](p=>p.filter((_,k)=>k!==j));}
+  function cpP(i,j,v){[setPhotos1,setPhotos2,setPhotos3][i](p=>p.map((x,k)=>k===j?{...x,cap:v}:x));}
+  function cpV(i,j,v){[setVideos1,setVideos2,setVideos3][i](p=>p.map((x,k)=>k===j?{...x,cap:v}:x));}
+  function hH(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>setHeroPhoto(r.result);r.readAsDataURL(f);}
+  function hHV(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>setHeroVideo(r.result);r.readAsDataURL(f);}
+  function hM(e){
+    const files=Array.from(e.target.files);
+    files.forEach(f=>{
+      const r=new FileReader();
+      r.onload=()=>setMusicList(prev=>[...prev,{src:r.result,name:f.name.replace(/\.[^.]+$/,"")}]);
+      r.readAsDataURL(f);
+    });
+    // 기존 단일 musicFile도 첫 곡으로 유지
+    if(files[0]){setMusicName(files[0].name.replace(/\.[^.]+$/,""));const r=new FileReader();r.onload=()=>setMusicFile(r.result);r.readAsDataURL(files[0]);}
+    e.target.value="";
+  }
+  function hV(e){const f=e.target.files[0];if(!f)return;setLocalVideoName(f.name.replace(/\.[^.]+$/,""));const r=new FileReader();r.onload=()=>setLocalVideo(r.result);r.readAsDataURL(f);}
+
+  function autoFill(){
+    if(!sender){alert("보내는 사람을 입력해주세요");return;}
+    if(!receiver){alert("받는 사람을 입력해주세요");return;}
+    const s=sender,r=receiver;
+    setEnvelopeTo(r+(category==="parents"?"님에게":"에게")); setLetterDate(def);
+    const m={propose:{g:"세상에서 가장 사랑하는\n"+r+"에게 💕",t1:"이 편지를 쓰면서 우리가 처음 만났던 날을 떠올려봤어.\n\n그날 이후로 내 하루하루가 완전히 달라졌어. 아침에 눈 뜨면 제일 먼저 네 생각이 나고, 자기 전 마지막으로 떠오르는 것도 네 얼굴이야.\n\n그게 얼마나 행복한 일인지, 너는 알까?",t2:"함께 걸었던 길, 함께 웃었던 순간들, 심지어 함께 울었던 날들까지...\n\n전부 다 내 인생에서 가장 소중한 보물이 됐어.\n\n앞으로의 모든 날들도 네 옆에서 보내고 싶어.",t3:"힘든 날엔 내가 기댈 수 있는 어깨가 되어줄게.\n기쁜 날엔 누구보다 크게 축하해줄게.\n\n나와 함께 걸어가줄래?\n평생, 영원히. ♥",c:"영원히 너만 사랑하는\n"+s+"가 ❤️",f:s+" ♥ "+r+"\n사랑해, 영원히."},birthday:{g:"생일 축하해\n사랑하는 "+r+"에게 🎂",t1:"오늘은 네가 세상에 태어난 날이야.\n\n이 세상에 네가 존재한다는 것만으로 내 인생이 얼마나 달라졌는지 몰라.",t2:"매년 이맘때면 생각해.\n네가 태어나줘서 정말 감사하다고.\n\n올해도, 내년에도 네 곁에서 축하해주고 싶어.",t3:"생일 축하해.\n태어나줘서 고마워. ♥",c:"네 생일이 가장 행복한\n"+s+"가 🎂",f:s+" ♥ "+r+"\n생일 축하해!"},anniversary:{g:"함께한 모든 날들에 감사하며\n"+r+"에게 💑",t1:"우리가 함께한 시간을 돌아보면, 하나하나가 다 소중한 순간이야.",t2:"그 모든 시간이 쌓여서 지금의 우리가 됐어.\n\n앞으로도 매일 너와 새로운 추억을 만들고 싶어.",t3:"다시 태어나도 널 선택할 거야. ♥",c:"변하지 않는 마음으로\n"+s+"가 💕",f:s+" ♥ "+r+"\n우리의 기념일에."},graduation:{g:"졸업을 축하하며\n"+r+"에게 🎓",t1:"드디어 해냈구나. 정말 축하해!\n\n네가 힘들 때마다 포기하지 않고 여기까지 온 거 알아.",t2:"끝까지 해낸 네가 정말 자랑스러워.\n\n이제 새로운 시작이야.",t3:"어떤 길을 가든 난 항상 네 편이야. 화이팅! ♥",c:"항상 응원하는\n"+s+"가 🎓",f:s+"가 "+r+"에게\n졸업을 축하하며."},parents:{g:"세상에서 가장 감사한\n"+r+"님에게 🙏",t1:"이런 편지를 쓰는 게 쑥스럽지만, 꼭 한번은 전하고 싶었어요.\n\n어릴 때부터 무조건적으로 사랑해주셔서 감사합니다.",t2:"제가 힘들 때 곁에 있어주시고, 다시 일어설 수 있게 해주신 것이 얼마나 큰 힘이었는지 이제야 알겠어요.",t3:"항상 건강하시고, 앞으로는 제가 더 잘 할게요.\n사랑합니다. ♥",c:"감사한 마음을 담아\n"+s+" 올림 🙏",f:s+"이(가) "+r+"님에게\n감사의 마음을 전합니다."}}[category];
+    setGreeting(m.g);setText1(m.t1);setText2(m.t2);setText3(m.t3);setClosing(m.c);setFooterText(m.f);
+  }
+
+  const pd={style,sender,receiver,envelopeTo,letterDate,greeting,closing,footerText,musicFile,musicName,musicList,videoUrl,localVideo,text1,photos1,videos1,text2,photos2,videos2,text3,photos3,videos3,heroPhoto,heroVideo};
+
+  if(page==="preview"){
+    const back=()=>setPage("form");
+    const ch=(id)=>setTpl(id);
+    if(tpl===1)return <T1 data={pd} onBack={back} onCh={ch}/>;
+    if(tpl===2)return <T2 data={pd} onBack={back} onCh={ch}/>;
+    if(tpl===3)return <T3 data={pd} onBack={back} onCh={ch}/>;
+    if(tpl===4)return <T4 data={pd} onBack={back} onCh={ch}/>;
+    if(tpl===5)return <T5 data={pd} onBack={back} onCh={ch}/>;
+  }
+
+  const inp={width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",borderRadius:8,boxSizing:"border-box",outline:"none",background:"#fff"};
+  const lb={fontSize:12,fontWeight:700,marginBottom:4,color:"#333"};
+  const card={background:"#fff",borderRadius:12,padding:18,marginBottom:10};
+  const catLabel={propose:"프로포즈",birthday:"생일",anniversary:"기념일",graduation:"졸업",parents:"감사"}[category];
+  const TPLS=[{id:1,name:"클래식",emoji:"💌",desc:"감성 편지"},{id:2,name:"타이핑",emoji:"✍️",desc:"손글씨 타이핑"},{id:3,name:"영화",emoji:"🎬",desc:"시네마틱"},{id:4,name:"매거진",emoji:"📖",desc:"편집샵 무드"},{id:5,name:"노트",emoji:"📝",desc:"따뜻한 노트"}];
+
+  function MediaBlock({idx,photos,videos,label}){
+    return <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #bcaaa4"}}>{label}</div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <input ref={pRefs[idx]} type="file" accept="image/*" multiple onChange={e=>addP(idx,e)} style={{display:"none"}}/>
+        <button onClick={()=>pRefs[idx].current.click()} style={{flex:1,padding:10,fontSize:12,fontWeight:600,border:"2px dashed #ccc",borderRadius:8,background:"#fafafa",color:"#888",cursor:"pointer"}}>🖼 사진 추가</button>
+        <input ref={vRefs[idx]} type="file" accept="video/*" multiple onChange={e=>addV(idx,e)} style={{display:"none"}}/>
+        <button onClick={()=>vRefs[idx].current.click()} style={{flex:1,padding:10,fontSize:12,fontWeight:600,border:"2px dashed #c8a882",borderRadius:8,background:"#fdf8f3",color:"#a07850",cursor:"pointer"}}>🎬 영상 추가</button>
+      </div>
+      {photos.length>0&&<>
+        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8}}>
+          {photos.map((p,i)=><div key={i} style={{position:"relative",flexShrink:0}}>
+            <img src={p.src} alt="" style={{width:70,height:70,objectFit:"cover",borderRadius:6}}/>
+            <button onClick={()=>rmP(idx,i)} style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",border:"none",background:"#e74c3c",color:"#fff",fontSize:9,cursor:"pointer"}}>×</button>
+          </div>)}
+        </div>
+        {photos.map((p,i)=><input key={i} style={{...inp,fontSize:12,marginBottom:4}} placeholder={"사진 "+(i+1)+" 캡션"} value={p.cap} onChange={e=>cpP(idx,i,e.target.value)}/>)}
+      </>}
+      {videos.length>0&&<div style={{marginTop:8}}>
+        {videos.map((v,i)=><div key={i} style={{marginBottom:10,background:"#fdf8f3",borderRadius:8,padding:8,border:"1px solid #e8d5b8"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <div style={{fontSize:12,fontWeight:600,color:"#a07850"}}>🎬 {v.name||"영상 "+(i+1)}</div>
+            <button onClick={()=>rmV(idx,i)} style={{fontSize:11,color:"#e74c3c",background:"none",border:"none",cursor:"pointer"}}>× 제거</button>
+          </div>
+          <video src={v.src} controls playsInline style={{width:"100%",borderRadius:6,maxHeight:140}}/>
+          <input style={{...inp,fontSize:12,marginTop:6}} placeholder="영상 캡션" value={v.cap} onChange={e=>cpV(idx,i,e.target.value)}/>
+        </div>)}
+      </div>}
+    </div>;
+  }
+
+  return <div style={{fontFamily:"'Noto Sans KR',sans-serif",margin:"0 auto",maxWidth:480,padding:"0 16px",background:"#f5f6f8",minHeight:"100vh"}}>
+    <div style={{textAlign:"center",padding:"16px 0 12px"}}>
+      <span style={{background:"#8d6e63",color:"#fff",fontWeight:900,fontSize:13,padding:"4px 10px",borderRadius:5}}>LETTER</span>
+      <span style={{fontSize:17,fontWeight:800,marginLeft:8}}>{catLabel}</span>
+      <p style={{fontSize:11,color:"#999",marginTop:4}}>프리미엄 편지 사이트 에디터</p>
+    </div>
+
+    <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #8d6e63"}}>🎨 템플릿 선택</div>
+      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:8}}>
+        {TPLS.map(t=>{const on=tpl===t.id;return <div key={t.id} onClick={()=>setTpl(t.id)} style={{flex:"0 0 auto",width:82,padding:"12px 6px",borderRadius:12,border:on?"2px solid #8d6e63":"2px solid #eee",background:on?"#efebe9":"#fff",cursor:"pointer",textAlign:"center",transition:"all 0.2s"}}>
+          <div style={{fontSize:22}}>{t.emoji}</div>
+          <div style={{fontSize:10,fontWeight:on?800:500,color:on?"#5d4037":"#888",marginTop:4,lineHeight:1.3}}>{t.name}</div>
+          <div style={{fontSize:8,color:"#aaa",marginTop:2}}>{t.desc}</div>
+        </div>;})}
+      </div>
+      {tpl===1&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #eee"}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#666",marginBottom:8}}>컬러 선택</div>
+        <div style={{display:"flex",gap:6,overflowX:"auto"}}>
+          {Object.entries(CS).map(([k,v])=>{const on=style===k;return <div key={k} onClick={()=>setStyle(k)} style={{flex:"0 0 auto",width:68,padding:"8px 4px",borderRadius:8,border:on?"2px solid #8d6e63":"2px solid #eee",background:on?"#efebe9":"#fff",cursor:"pointer",textAlign:"center"}}>
+            <div style={{fontSize:18}}>{v.emoji}</div>
+            <div style={{fontSize:9,fontWeight:on?700:400,color:on?"#5d4037":"#888",marginTop:2}}>{v.name}</div>
+          </div>;})}
+        </div>
+      </div>}
+    </div>
+
+    <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #8d6e63"}}>기본 정보</div>
+      <div style={{marginBottom:14}}>
+        <div style={lb}>카테고리</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {[["propose","💍 프로포즈"],["birthday","🎂 생일"],["anniversary","💑 기념일"],["graduation","🎓 졸업"],["parents","🙏 부모님"]].map(([k,v])=>{const on=category===k;return <button key={k} onClick={()=>setCategory(k)} style={{padding:"7px 12px",fontSize:12,fontWeight:on?700:400,border:on?"2px solid #8d6e63":"1px solid #ddd",borderRadius:20,background:on?"#efebe9":"#fff",color:on?"#5d4037":"#666",cursor:"pointer"}}>{v}</button>;})}
+        </div>
+      </div>
+      <div style={{marginBottom:12}}><div style={lb}>보내는 사람 *</div><input style={inp} placeholder="예: 이원철" value={sender} onChange={e=>setSender(e.target.value)}/></div>
+      <div style={{marginBottom:12}}><div style={lb}>받는 사람 *</div><input style={inp} placeholder="예: 권민정" value={receiver} onChange={e=>setReceiver(e.target.value)}/></div>
+      <button onClick={autoFill} style={{width:"100%",padding:14,fontSize:14,fontWeight:700,border:"none",borderRadius:8,background:"#8d6e63",color:"#fff",cursor:"pointer",marginTop:8}}>✨ 편지 초안 자동생성</button>
+    </div>
+
+    <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #ffab91"}}>봉투 & 표지</div>
+      <div style={{marginBottom:12}}><div style={lb}>봉투 문구</div><input style={inp} placeholder="예: 민정에게" value={envelopeTo} onChange={e=>setEnvelopeTo(e.target.value)}/></div>
+      <div style={{marginBottom:12}}><div style={lb}>날짜</div><input style={inp} value={letterDate} onChange={e=>setLetterDate(e.target.value)}/></div>
+      <div style={lb}>표지 사진 또는 영상</div>
+      <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <input ref={heroRef} type="file" accept="image/*" onChange={hH} style={{display:"none"}}/>
+        <button onClick={()=>heroRef.current.click()} style={{flex:1,padding:10,fontSize:12,fontWeight:600,border:"2px dashed #ccc",borderRadius:8,background:"#fafafa",color:"#888",cursor:"pointer"}}>{heroPhoto?"✓ 사진":"🖼 사진 추가"}</button>
+        <input ref={heroVRef} type="file" accept="video/*" onChange={hHV} style={{display:"none"}}/>
+        <button onClick={()=>heroVRef.current.click()} style={{flex:1,padding:10,fontSize:12,fontWeight:600,border:"2px dashed #c8a882",borderRadius:8,background:"#fdf8f3",color:"#a07850",cursor:"pointer"}}>{heroVideo?"✓ 영상":"🎬 영상 추가"}</button>
+      </div>
+      {heroPhoto&&<div style={{position:"relative",marginBottom:6}}><img src={heroPhoto} alt="" style={{width:"100%",maxHeight:120,objectFit:"cover",borderRadius:6}}/><button onClick={()=>setHeroPhoto(null)} style={{position:"absolute",top:4,right:4,fontSize:11,color:"#fff",background:"rgba(231,76,60,0.85)",border:"none",borderRadius:12,padding:"2px 8px",cursor:"pointer"}}>× 제거</button></div>}
+      {heroVideo&&<div><video src={heroVideo} controls playsInline style={{width:"100%",borderRadius:6,maxHeight:140}}/><button onClick={()=>setHeroVideo(null)} style={{fontSize:11,color:"#e74c3c",background:"none",border:"none",cursor:"pointer",marginTop:4}}>× 제거</button></div>}
+    </div>
+
+    <div style={card}><div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #a1887f"}}>인사말</div><textarea style={{...inp,minHeight:60,resize:"vertical",lineHeight:1.6}} value={greeting} onChange={e=>setGreeting(e.target.value)}/></div>
+    <div style={card}><div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #a1887f"}}>편지 블록 1</div><textarea style={{...inp,minHeight:100,resize:"vertical",lineHeight:1.6}} value={text1} onChange={e=>setText1(e.target.value)}/></div>
+    <MediaBlock idx={0} photos={photos1} videos={videos1} label="사진 및 동영상 1구간"/>
+    <div style={card}><div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #a1887f"}}>편지 블록 2</div><textarea style={{...inp,minHeight:80,resize:"vertical",lineHeight:1.6}} value={text2} onChange={e=>setText2(e.target.value)}/></div>
+    <MediaBlock idx={1} photos={photos2} videos={videos2} label="사진 및 동영상 2구간 (선택)"/>
+    <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #a1887f"}}>편지 블록 3 + 마무리</div>
+      <div style={{marginBottom:12}}><textarea style={{...inp,minHeight:80,resize:"vertical",lineHeight:1.6}} value={text3} onChange={e=>setText3(e.target.value)}/></div>
+      <div style={lb}>마무리</div><textarea style={{...inp,minHeight:50,resize:"vertical",lineHeight:1.6}} value={closing} onChange={e=>setClosing(e.target.value)}/>
+    </div>
+    <MediaBlock idx={2} photos={photos3} videos={videos3} label="사진 및 동영상 3구간 (선택)"/>
+
+    <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #a1887f"}}>추억 영상 (선택)</div>
+      <div style={lb}>유튜브 URL</div>
+      <input style={{...inp,marginBottom:6}} placeholder="https://youtube.com/..." value={videoUrl} onChange={e=>setVideoUrl(e.target.value)}/>
+      <p style={{fontSize:11,textAlign:"center",marginBottom:10,color:ytId.length===11?"#00c73c":"#999"}}>{ytId.length===11?"✓ 유튜브 연결됨":"또는 파일 직접 업로드"}</p>
+      <input ref={vidRef} type="file" accept="video/*" onChange={hV} style={{display:"none"}}/>
+      <button onClick={()=>vidRef.current.click()} style={{width:"100%",padding:10,fontSize:12,fontWeight:600,border:"2px dashed #ccc",borderRadius:8,background:"#fafafa",color:"#888",cursor:"pointer"}}>{localVideo?"✓ "+localVideoName:"+ mp4, mov 파일 업로드"}</button>
+      {localVideo&&<div style={{marginTop:8}}><video src={localVideo} controls playsInline style={{width:"100%",borderRadius:8,maxHeight:180}}/><button onClick={()=>{setLocalVideo(null);setLocalVideoName("");}} style={{marginTop:4,fontSize:11,color:"#e74c3c",background:"none",border:"none",cursor:"pointer"}}>× 제거</button></div>}
+    </div>
+
+    <div style={card}>
+      <div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #ffab91"}}>배경음악 (선택)</div>
+      <input ref={musicRef} type="file" accept="audio/*" multiple onChange={hM} style={{display:"none"}}/>
+      <button onClick={()=>musicRef.current.click()} style={{width:"100%",padding:10,fontSize:12,fontWeight:600,border:"2px dashed #ccc",borderRadius:8,background:"#fafafa",color:"#888",cursor:"pointer"}}>+ 음악 파일 추가 (mp3, 여러 곡 가능)</button>
+      {musicList.length>0&&<div style={{marginTop:10}}>
+        {musicList.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:i===0?"#fff8f0":"#fafafa",borderRadius:8,marginBottom:4,border:"1px solid #e8d5b8"}}>
+          <span style={{fontSize:16}}>🎵</span>
+          <span style={{flex:1,fontSize:13,fontWeight:600,color:"#5d4037"}}>{m.name}</span>
+          {i===0&&<span style={{fontSize:10,color:"#c8a882",fontWeight:700}}>재생중</span>}
+          <button onClick={()=>{setMusicList(prev=>prev.filter((_,j)=>j!==i));if(i===0){setMusicFile(musicList[1]?.src||null);setMusicName(musicList[1]?.name||"");}}} style={{fontSize:11,color:"#e74c3c",background:"none",border:"none",cursor:"pointer"}}>× 제거</button>
+        </div>)}
+        <p style={{fontSize:11,color:"#999",marginTop:4}}>총 {musicList.length}곡 · 첫 번째 곡이 재생됩니다</p>
+      </div>}
+    </div>
+
+    <div style={card}><div style={{fontSize:14,fontWeight:800,marginBottom:14,paddingBottom:8,borderBottom:"2px solid #d7ccc8"}}>하단 메시지</div><textarea style={{...inp,minHeight:50,resize:"vertical",lineHeight:1.6}} value={footerText} onChange={e=>setFooterText(e.target.value)}/></div>
+
+    <button onClick={()=>setPage("preview")} style={{width:"100%",padding:16,fontSize:16,fontWeight:800,border:"none",borderRadius:10,background:"linear-gradient(135deg,#8d6e63,#6d4c41)",color:"#fff",cursor:"pointer",marginBottom:40}}>
+      {TPLS[tpl-1].emoji} 미리보기 →
+    </button>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
