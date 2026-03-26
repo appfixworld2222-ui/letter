@@ -178,6 +178,36 @@ function Stars({S}){
   </div>;
 }
 
+// 여러 곡 순서대로 재생하는 훅
+function useMusic(musicList,musicFile){
+  const aRef=useRef(null);
+  const [pl,setPl]=useState(false);
+  const [idx,setIdx]=useState(0);
+  const list=musicList&&musicList.length>0?musicList:(musicFile?[{src:musicFile,name:"배경음악"}]:[]);
+  const curName=list[idx]?.name||"배경음악";
+  const curSrc=list[idx]?.src||null;
+
+  function tog(){
+    const a=aRef.current;if(!a)return;
+    if(pl){a.pause();setPl(false);}
+    else{a.play().catch(()=>{});setPl(true);}
+  }
+  function handleEnded(){
+    if(list.length<=1)return;
+    const next=(idx+1)%list.length;
+    setIdx(next);
+  }
+  useEffect(()=>{
+    const a=aRef.current;if(!a||!pl)return;
+    a.play().catch(()=>{});
+  },[idx]);
+
+  function startPlay(){
+    if(aRef.current&&list.length>0){aRef.current.play().catch(()=>{});setPl(true);}
+  }
+  return{aRef,pl,setPl,tog,curSrc,curName,handleEnded,startPlay};
+}
+
 function TopBar({cur,onChange,bg,ac,playing,onMusic,mName}){
   const [showMenu,setShowMenu]=useState(false);
   const labels={1:"💌 클래식",2:"✍️ 타이핑",3:"🎬 영화",4:"📖 매거진",5:"📝 노트"};
@@ -209,14 +239,12 @@ function TopBar({cur,onChange,bg,ac,playing,onMusic,mName}){
 function T1({data:d,onBack,onCh}){
   const S=CS[d.style||"dark"];
   const [open,setOpen]=useState(false);
-  const [pl,setPl]=useState(false);
   const [view,setView]=useState(null);
-  const aRef=useRef(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
   const ytId=parseYt(d.videoUrl||"");
   const now=new Date(),def=now.getFullYear()+"년 "+(now.getMonth()+1)+"월 "+now.getDate()+"일";
-  const tog=()=>{const a=aRef.current;if(!a)return;if(pl){a.pause();setPl(false);}else{a.play().catch(()=>{});setPl(true);}};
   return <div style={{minHeight:"100vh",background:S.bg,color:S.textColor,fontFamily:S.fontMain,position:"relative"}}>
-    {d.musicFile&&<audio ref={aRef} src={d.musicFile} loop/>}
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
     {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
     <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(255,255,255,0.9)",color:"#333",cursor:"pointer"}}>← 편집</button>
     {!open&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px 28px",position:"relative",overflow:"hidden"}}>
@@ -229,14 +257,14 @@ function T1({data:d,onBack,onCh}){
       </div>
       {/* 버튼은 별도 div로 zIndex:6 — 뒤별(3)은 뒤로, 앞별(8)은 앞으로 통과 */}
       <div style={{position:"relative",zIndex:6,marginTop:36}}>
-        <button onClick={()=>{setOpen(true);if(aRef.current){aRef.current.play().catch(()=>{});setPl(true);}}}
+        <button onClick={()=>{setOpen(true);startPlay();}}
           style={{fontFamily:S.fontMain,fontSize:16,color:S.envTx,background:S.envBg,border:"none",padding:"18px 52px",borderRadius:50,cursor:"pointer",letterSpacing:3,fontWeight:700,animation:"pulse 2s infinite",boxShadow:`0 8px 32px ${S.accent}44`}}>
           편지 열기
         </button>
       </div>
     </div>}
     {open&&<div style={{animation:"fadeUp 0.8s ease"}}>
-      <TopBar cur={1} onChange={onCh} bg={S.mBg} ac={S.accent} playing={pl} onMusic={tog} mName={d.musicName}/>
+      <TopBar cur={1} onChange={onCh} bg={S.mBg} ac={S.accent} playing={pl} onMusic={tog} mName={curName}/>
       {(d.heroPhoto||d.heroVideo)&&<div style={{width:"100%",height:"100vh",position:"relative",overflow:"hidden"}}>
         {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.45)"}}/>
           :<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.45)"}}/>}
@@ -285,13 +313,11 @@ function T1({data:d,onBack,onCh}){
 // T2 타이핑 편지
 function T2({data:d,onBack,onCh}){
   const [phase,setPhase]=useState(0);
-  const [pl,setPl]=useState(false);
   const [bi,setBi]=useState(0);
   const [view,setView]=useState(null);
-  const aRef=useRef(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
   const ytId=parseYt(d.videoUrl||"");
   const now=new Date(),def=now.getFullYear()+"년 "+(now.getMonth()+1)+"월 "+now.getDate()+"일";
-  const tog=()=>{const a=aRef.current;if(!a)return;if(pl){a.pause();setPl(false);}else{a.play().catch(()=>{});setPl(true);}};
   const blocks=[
     {text:d.greeting||"사랑하는 당신에게",big:true},
     {text:d.text1,photos:d.photos1,videos:d.videos1},
@@ -302,7 +328,7 @@ function T2({data:d,onBack,onCh}){
   const ink="#2c1810",paper="#fdf6ec";
   const ls={backgroundImage:"repeating-linear-gradient(transparent,transparent 39px,rgba(180,150,100,0.12) 39px,rgba(180,150,100,0.12) 40px)",backgroundSize:"100% 40px"};
   return <div style={{minHeight:"100vh",background:paper,color:ink,fontFamily:"'Nanum Pen Script',cursive",position:"relative"}}>
-    {d.musicFile&&<audio ref={aRef} src={d.musicFile} loop/>}
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
     {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
     <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(44,24,16,0.85)",color:"#fdf6ec",cursor:"pointer",fontFamily:"'Noto Sans KR',sans-serif"}}>← 편집</button>
     {phase===0&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",position:"relative",overflow:"hidden",background:"linear-gradient(160deg,#fdf6ec,#f5e8d0)"}}>
@@ -313,14 +339,14 @@ function T2({data:d,onBack,onCh}){
         <div style={{fontSize:34,lineHeight:1.4,marginBottom:8,color:ink}}>{d.envelopeTo||"사랑하는 당신에게"}</div>
         <div style={{width:80,height:1,background:"rgba(139,115,85,0.4)",margin:"20px auto"}}/>
         <div style={{fontFamily:"'Noto Sans KR',sans-serif",fontSize:12,color:"#8b7355",marginBottom:32}}>{d.letterDate||def}</div>
-        <button onClick={()=>{setPhase(1);if(aRef.current){aRef.current.play().catch(()=>{});setPl(true);}}}
+        <button onClick={()=>{setPhase(1);startPlay();}}
           style={{fontFamily:"'Nanum Pen Script',cursive",fontSize:20,color:"#fdf6ec",background:"linear-gradient(135deg,#5d4037,#3e2723)",border:"none",padding:"16px 44px",borderRadius:4,cursor:"pointer",letterSpacing:2,boxShadow:"0 4px 20px rgba(93,64,55,0.4)",animation:"pulse 2s infinite"}}>
           편지 열기 ✉
         </button>
       </div>
     </div>}
     {phase===1&&<div>
-      <TopBar cur={2} onChange={onCh} bg="rgba(253,246,236,0.97)" ac="#8b7355" playing={pl} onMusic={tog} mName={d.musicName}/>
+      <TopBar cur={2} onChange={onCh} bg="rgba(253,246,236,0.97)" ac="#8b7355" playing={pl} onMusic={tog} mName={curName}/>
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 0 80px",position:"relative"}}>
         <div style={{position:"fixed",inset:0,...ls,pointerEvents:"none",zIndex:0}}/>
         {(d.heroPhoto||d.heroVideo)&&<div style={{width:"100%",height:"55vw",maxHeight:260,overflow:"hidden",position:"relative"}}>
@@ -365,15 +391,13 @@ function T2({data:d,onBack,onCh}){
 // T3 영화 크레딧
 function T3({data:d,onBack,onCh}){
   const [started,setStarted]=useState(false);
-  const [pl,setPl]=useState(false);
   const [view,setView]=useState(null);
-  const aRef=useRef(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
   const ytId=parseYt(d.videoUrl||"");
   const now=new Date(),def=now.getFullYear()+"."+String(now.getMonth()+1).padStart(2,"0")+"."+String(now.getDate()).padStart(2,"0");
-  const tog=()=>{const a=aRef.current;if(!a)return;if(pl){a.pause();setPl(false);}else{a.play().catch(()=>{});setPl(true);}};
   const chs=[{ch:"I",text:d.text1,photos:d.photos1,vids:d.videos1},{ch:"II",text:d.text2,photos:d.photos2,vids:d.videos2},{ch:"III",text:d.text3,photos:d.photos3,vids:d.videos3}];
   return <div style={{minHeight:"100vh",background:"#000",color:"#fff",position:"relative"}}>
-    {d.musicFile&&<audio ref={aRef} src={d.musicFile} loop/>}
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
     {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
     <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>← 편집</button>
     {!started&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",position:"relative"}}>
@@ -384,12 +408,12 @@ function T3({data:d,onBack,onCh}){
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontStyle:"italic",lineHeight:1.2,marginBottom:8}}>{d.envelopeTo||d.receiver||"당신에게"}</div>
         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"rgba(255,255,255,0.3)",letterSpacing:4,marginBottom:48}}>{d.letterDate||def}</div>
         <div style={{width:1,height:40,background:"rgba(255,255,255,0.2)",margin:"0 auto 40px"}}/>
-        <button onClick={()=>{setStarted(true);if(aRef.current){aRef.current.play().catch(()=>{});setPl(true);}}}
+        <button onClick={()=>{setStarted(true);startPlay();}}
           style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:6,color:"#fff",background:"transparent",border:"1px solid rgba(255,255,255,0.4)",padding:"14px 40px",cursor:"pointer",textTransform:"uppercase",animation:"pulse 2s infinite"}}>PLAY</button>
       </div>
     </div>}
     {started&&<div>
-      <TopBar cur={3} onChange={onCh} bg="rgba(0,0,0,0.95)" ac="rgba(255,255,255,0.5)" playing={pl} onMusic={tog} mName={d.musicName}/>
+      <TopBar cur={3} onChange={onCh} bg="rgba(0,0,0,0.95)" ac="rgba(255,255,255,0.5)" playing={pl} onMusic={tog} mName={curName}/>
       {(d.heroPhoto||d.heroVideo)&&<div style={{width:"100%",height:"100vh",position:"relative"}}>
         {d.heroVideo?<video src={d.heroVideo} autoPlay muted loop playsInline style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.25)"}}/>
           :<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.25)"}}/>}
@@ -423,16 +447,14 @@ function T3({data:d,onBack,onCh}){
 // T4 감성 매거진
 function T4({data:d,onBack,onCh}){
   const [open,setOpen]=useState(false);
-  const [pl,setPl]=useState(false);
   const [view,setView]=useState(null);
-  const aRef=useRef(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
   const ytId=parseYt(d.videoUrl||"");
   const now=new Date();
   const months=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   const ds=months[now.getMonth()]+" "+now.getDate()+", "+now.getFullYear();
-  const tog=()=>{const a=aRef.current;if(!a)return;if(pl){a.pause();setPl(false);}else{a.play().catch(()=>{});setPl(true);}};
   return <div style={{minHeight:"100vh",background:"#F4F0EA",color:"#1a1a1a",fontFamily:"'Playfair Display',serif",position:"relative"}}>
-    {d.musicFile&&<audio ref={aRef} src={d.musicFile} loop/>}
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
     {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
     <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(0,0,0,0.8)",color:"#fff",cursor:"pointer"}}>← 편집</button>
     {!open&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column"}}>
@@ -452,12 +474,12 @@ function T4({data:d,onBack,onCh}){
         </div>
       </div>
       <div style={{padding:"24px",borderTop:"2px solid #1a1a1a"}}>
-        <button onClick={()=>{setOpen(true);if(aRef.current){aRef.current.play().catch(()=>{});setPl(true);}}}
+        <button onClick={()=>{setOpen(true);startPlay();}}
           style={{width:"100%",padding:"16px",fontSize:13,fontWeight:700,border:"2px solid #1a1a1a",background:"#1a1a1a",color:"#F4F0EA",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:4,textTransform:"uppercase"}}>READ NOW →</button>
       </div>
     </div>}
     {open&&<div>
-      <TopBar cur={4} onChange={onCh} bg="#F4F0EA" ac="#8b7355" playing={pl} onMusic={tog} mName={d.musicName}/>
+      <TopBar cur={4} onChange={onCh} bg="#F4F0EA" ac="#8b7355" playing={pl} onMusic={tog} mName={curName}/>
       <div style={{maxWidth:480,margin:"0 auto"}}>
         <div style={{padding:"48px 24px 32px",borderBottom:"1px solid rgba(0,0,0,0.1)"}}>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:5,color:"#8b7355",marginBottom:16,textTransform:"uppercase"}}>Opening</div>
@@ -487,15 +509,13 @@ function T4({data:d,onBack,onCh}){
 // T5 손편지 노트
 function T5({data:d,onBack,onCh}){
   const [open,setOpen]=useState(false);
-  const [pl,setPl]=useState(false);
   const [view,setView]=useState(null);
-  const aRef=useRef(null);
+  const {aRef,pl,tog,curSrc,curName,handleEnded,startPlay}=useMusic(d.musicList,d.musicFile);
   const ytId=parseYt(d.videoUrl||"");
   const now=new Date(),def=(now.getMonth()+1)+"월 "+now.getDate()+"일, "+now.getFullYear();
-  const tog=()=>{const a=aRef.current;if(!a)return;if(pl){a.pause();setPl(false);}else{a.play().catch(()=>{});setPl(true);}};
   const ls={backgroundImage:"repeating-linear-gradient(transparent, transparent 31px, #c8b89a 31px, #c8b89a 32px)",backgroundSize:"100% 32px"};
   return <div style={{minHeight:"100vh",background:"#f0e8d8",color:"#2c1810",fontFamily:"'Nanum Pen Script',cursive",position:"relative"}}>
-    {d.musicFile&&<audio ref={aRef} src={d.musicFile} loop/>}
+    {curSrc&&<audio ref={aRef} src={curSrc} onEnded={handleEnded}/>}
     {view&&<PhotoViewer src={view.src} cap={view.cap} onClose={()=>setView(null)}/>}
     <button onClick={onBack} style={{position:"fixed",top:10,right:10,zIndex:300,padding:"7px 14px",fontSize:11,fontWeight:700,border:"none",borderRadius:20,background:"rgba(44,24,16,0.8)",color:"#f0e8d8",cursor:"pointer",fontFamily:"'Noto Sans KR',sans-serif"}}>← 편집</button>
     {!open&&<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",background:"linear-gradient(160deg,#f0e8d8,#e4d4b8)"}}>
@@ -512,13 +532,13 @@ function T5({data:d,onBack,onCh}){
           {d.heroPhoto?<img src={d.heroPhoto} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div style={{fontSize:20}}>💌</div>}
         </div>
       </div>
-      <button onClick={()=>{setOpen(true);if(aRef.current){aRef.current.play().catch(()=>{});setPl(true);}}}
+      <button onClick={()=>{setOpen(true);startPlay();}}
         style={{marginTop:32,padding:"14px 36px",fontSize:18,color:"#2c1810",background:"transparent",border:"2px solid #8b7355",cursor:"pointer",fontFamily:"'Nanum Pen Script',cursive",letterSpacing:2,animation:"pulse 2s infinite"}}>
         편지 열기 ✉
       </button>
     </div>}
     {open&&<div>
-      <TopBar cur={5} onChange={onCh} bg="rgba(240,232,216,0.97)" ac="#8b7355" playing={pl} onMusic={tog} mName={d.musicName}/>
+      <TopBar cur={5} onChange={onCh} bg="rgba(240,232,216,0.97)" ac="#8b7355" playing={pl} onMusic={tog} mName={curName}/>
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 0 80px"}}>
         <div style={{...ls,padding:"32px 28px 40px",borderBottom:"2px solid #c8b89a"}}>
           <div style={{textAlign:"right",fontSize:18,color:"#8b7355",marginBottom:32}}>{d.letterDate||def}</div>
